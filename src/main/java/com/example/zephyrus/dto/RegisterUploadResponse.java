@@ -1,6 +1,9 @@
 package com.example.zephyrus.dto;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import lombok.Data;
+
+import java.util.Map;
 
 @Data
 public class RegisterUploadResponse {
@@ -15,12 +18,21 @@ public class RegisterUploadResponse {
 
     @Data
     public static class UploadMechanism {
-        private HttpRequest uploadHttpRequest;
+
+        private MediaUploadHttpRequest httpRequest;
+
+        @JsonAnySetter
+        public void handleDynamicKey(String key, Object value) {
+            if (value instanceof Map<?, ?> map) {
+                MediaUploadHttpRequest req = new MediaUploadHttpRequest();
+                req.setUploadUrl(map.get("uploadUrl").toString());
+                this.httpRequest = req;
+            }
+        }
     }
 
     @Data
-    public static class HttpRequest {
+    public static class MediaUploadHttpRequest {
         private String uploadUrl;
     }
 }
-

@@ -1,5 +1,7 @@
 package com.example.zephyrus.controller;
 
+import com.example.zephyrus.service.LinkedInService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
@@ -7,8 +9,11 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/auth/linkedin")
+@RequiredArgsConstructor
 public class LinkedInAuthController {
 
     @Value("${linkedin.client-id}")
@@ -22,30 +27,67 @@ public class LinkedInAuthController {
 
     private final RestTemplate restTemplate;
 
-    public LinkedInAuthController(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-    }
+    private final LinkedInService linkedInService;
 
     @GetMapping("/callback")
-    public ResponseEntity<String> callback(@RequestParam String code) {
+    public ResponseEntity<?> callback(@RequestParam(required = false) String code,
+                                      @RequestParam(required = false) String error) {
 
-        String tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
+        try {
+            if (error != null) {
+                return ResponseEntity.badRequest().body("OAuth error: " + error);
+            }
 
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "authorization_code");
-        body.add("code", code);
-        body.add("redirect_uri", redirectUri);
-        body.add("client_id", clientId);
-        body.add("client_secret", clientSecret);
+            if (code == null) {
+                return ResponseEntity.badRequest().body("Missing authorization code");
+            }
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            /* -------------------------------------------------
+             * 1️⃣ Exchange AUTHORIZATION CODE → ACCESS TOKEN
+             * ------------------------------------------------- */
+            String tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
 
-        HttpEntity<?> request = new HttpEntity<>(body, headers);
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("grant_type", "authorization_code");
+            body.add("code", code);
+            body.add("redirect_uri", redirectUri);
+            body.add("client_id", clientId);
+            body.add("client_secret", clientSecret);
 
-        ResponseEntity<String> response =
-                restTemplate.postForEntity(tokenUrl, request, String.class);
+            HttpHeaders tokenHeaders = new HttpHeaders();
+            tokenHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        return ResponseEntity.ok(response.getBody());
+            HttpEntity<?> tokenRequest = new HttpEntity<>(body, tokenHeaders);
+
+            ResponseEntity<Map> tokenResponse =
+                    restTemplate.postForEntity(tokenUrl, tokenRequest, Map.class);
+
+            String accessToken = (String) tokenResponse.getBody().get("access_token");
+
+            /* -------------------------------------------------
+             * 2️⃣ Call LINKEDIN USERINFO API (OAuth 2.0)
+             * ------------------------------------------------- */
+//            String userInfoUrl = "https://api.linkedin.com/v2/userinfo";
+//
+//            HttpHeaders userHeaders = new HttpHeaders();
+//            userHeaders.setBearerAuth(accessToken); // ✅ OAuth 2.0 Bearer token
+//            userHeaders.set("X-Restli-Protocol-Version", "2.0.0");
+//
+//            HttpEntity<Void> userRequest = new HttpEntity<>(userHeaders);
+//
+//            ResponseEntity<String> userInfoResponse =
+//                    restTemplate.exchange(
+//                            userInfoUrl,
+//                            HttpMethod.GET,
+//                            userRequest,
+//                            String.class
+//                    );
+
+            return ResponseEntity.ok(linkedInService.postText("Hi! This is my automated post for testing.",accessToken));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error during LinkedIn OAuth flow: " + e.getMessage());
+        }
     }
 }

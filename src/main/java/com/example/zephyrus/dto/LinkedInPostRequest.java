@@ -11,7 +11,5 @@ public class LinkedInPostRequest {
     @NotBlank
     private String accessToken;
 
-    @NotBlank
-    private String personUrn;
 }
 
