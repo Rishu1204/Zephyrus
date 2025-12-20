@@ -1,13 +1,11 @@
 package com.example.zephyrus.service;
 
-import com.example.zephyrus.dto.RegisterUploadResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -15,56 +13,22 @@ public class LinkedInService {
 
     private final RestTemplate restTemplate;
 
-    private static final String REGISTER_UPLOAD_URL = "https://api.linkedin.com/v2/assets?action=registerUpload";
     private static final String POST_URL = "https://api.linkedin.com/v2/ugcPosts";
+    private static final String USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
 
-    public String postImage(MultipartFile image, String caption, String accessToken, String personUrn) throws IOException {
+    public String postText(String caption, String accessToken) {
 
-        HttpHeaders headers = authHeaders(accessToken);
+        // 1️⃣ Get person URN
+        String personUrn = getPersonUrn(accessToken);
+
+        // 2️⃣ Prepare headers (OAuth 2.0)
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
-        String registerPayload = """
-        {
-          "registerUploadRequest": {
-            "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-            "owner": "%s",
-            "serviceRelationships": [{
-              "relationshipType": "OWNER",
-              "identifier": "urn:li:userGeneratedContent"
-            }]
-          }
-        }
-        """.formatted(personUrn);
+        headers.set("X-Restli-Protocol-Version", "2.0.0");
 
-        HttpEntity<String> registerEntity = new HttpEntity<>(registerPayload, headers);
-        ResponseEntity<RegisterUploadResponse> registerResponse =
-                restTemplate.postForEntity(
-                        REGISTER_UPLOAD_URL,
-                        registerEntity,
-                        RegisterUploadResponse.class
-                );
-
-        String uploadUrl = registerResponse.getBody()
-                        .getValue()
-                        .getUploadMechanism()
-                        .getUploadHttpRequest()
-                        .getUploadUrl();
-
-        String asset =
-                registerResponse.getBody()
-                        .getValue()
-                        .getAsset();
-
-        // 2️⃣ Upload image binary
-        HttpHeaders uploadHeaders = authHeaders(accessToken);
-        uploadHeaders.setContentType(MediaType.parseMediaType(image.getContentType()));
-
-        HttpEntity<byte[]> uploadEntity =
-                new HttpEntity<>(image.getBytes(), uploadHeaders);
-
-        restTemplate.exchange(uploadUrl, HttpMethod.PUT, uploadEntity, String.class);
-
-        // 3️⃣ Create post
-        String postPayload = """
+        // 3️⃣ Raw JSON payload (TEXT POST)
+        String payload = """
         {
           "author": "%s",
           "lifecycleState": "PUBLISHED",
@@ -73,31 +37,37 @@ public class LinkedInService {
               "shareCommentary": {
                 "text": "%s"
               },
-              "shareMediaCategory": "IMAGE",
-              "media": [{
-                "status": "READY",
-                "media": "%s"
-              }]
+              "shareMediaCategory": "NONE"
             }
           },
           "visibility": {
             "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
           }
         }
-        """.formatted(personUrn, caption, asset);
+        """.formatted(personUrn, caption);
 
-        HttpEntity<String> postEntity =
-                new HttpEntity<>(postPayload, headers);
+        HttpEntity<String> request = new HttpEntity<>(payload, headers);
 
-        ResponseEntity<String> postResponse =
-                restTemplate.postForEntity(POST_URL, postEntity, String.class);
+        ResponseEntity<Map> response =
+                restTemplate.postForEntity(POST_URL, request, Map.class);
 
-        return postResponse.getBody();
+        return response.getBody().get("id").toString();
     }
 
-    private HttpHeaders authHeaders(String token) {
+    // ✅ Uses OpenID Connect userinfo
+    private String getPersonUrn(String accessToken) {
+
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        return headers;
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<Map> response =
+                restTemplate.exchange(
+                        USERINFO_URL,
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        Map.class
+                );
+
+        return "urn:li:person:" + response.getBody().get("sub").toString();
     }
 }
