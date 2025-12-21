@@ -28,6 +28,15 @@ public class LinkedInService {
         headers.set("X-Restli-Protocol-Version", "2.0.0");
 
         // 3️⃣ Raw JSON payload (TEXT POST)
+        HttpEntity<String> request = getStringHttpEntity(caption, personUrn, headers);
+
+        ResponseEntity<Map> response =
+                restTemplate.postForEntity(POST_URL, request, Map.class);
+
+        return response.getBody().get("id").toString();
+    }
+
+    private HttpEntity<String> getStringHttpEntity(String caption, String personUrn, HttpHeaders headers) {
         String payload = """
         {
           "author": "%s",
@@ -47,11 +56,7 @@ public class LinkedInService {
         """.formatted(personUrn, caption);
 
         HttpEntity<String> request = new HttpEntity<>(payload, headers);
-
-        ResponseEntity<Map> response =
-                restTemplate.postForEntity(POST_URL, request, Map.class);
-
-        return response.getBody().get("id").toString();
+        return request;
     }
 
     // ✅ Uses OpenID Connect userinfo

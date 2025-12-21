@@ -26,63 +26,31 @@ public class LinkedInAuthController {
     private String redirectUri;
 
     private final RestTemplate restTemplate;
-
     private final LinkedInService linkedInService;
 
     @GetMapping("/callback")
     public ResponseEntity<?> callback(@RequestParam(required = false) String code,
                                       @RequestParam(required = false) String error) {
-
         try {
             if (error != null) {
                 return ResponseEntity.badRequest().body("OAuth error: " + error);
             }
-
             if (code == null) {
                 return ResponseEntity.badRequest().body("Missing authorization code");
             }
-
-            /* -------------------------------------------------
-             * 1️⃣ Exchange AUTHORIZATION CODE → ACCESS TOKEN
-             * ------------------------------------------------- */
             String tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
-
             MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
             body.add("grant_type", "authorization_code");
             body.add("code", code);
             body.add("redirect_uri", redirectUri);
             body.add("client_id", clientId);
             body.add("client_secret", clientSecret);
-
             HttpHeaders tokenHeaders = new HttpHeaders();
             tokenHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
             HttpEntity<?> tokenRequest = new HttpEntity<>(body, tokenHeaders);
-
             ResponseEntity<Map> tokenResponse =
                     restTemplate.postForEntity(tokenUrl, tokenRequest, Map.class);
-
             String accessToken = (String) tokenResponse.getBody().get("access_token");
-
-            /* -------------------------------------------------
-             * 2️⃣ Call LINKEDIN USERINFO API (OAuth 2.0)
-             * ------------------------------------------------- */
-//            String userInfoUrl = "https://api.linkedin.com/v2/userinfo";
-//
-//            HttpHeaders userHeaders = new HttpHeaders();
-//            userHeaders.setBearerAuth(accessToken); // ✅ OAuth 2.0 Bearer token
-//            userHeaders.set("X-Restli-Protocol-Version", "2.0.0");
-//
-//            HttpEntity<Void> userRequest = new HttpEntity<>(userHeaders);
-//
-//            ResponseEntity<String> userInfoResponse =
-//                    restTemplate.exchange(
-//                            userInfoUrl,
-//                            HttpMethod.GET,
-//                            userRequest,
-//                            String.class
-//                    );
-
             return ResponseEntity.ok(linkedInService.postText("Hi! This is my automated post for testing.",accessToken));
 
         } catch (Exception e) {
